@@ -1,23 +1,41 @@
 from django.shortcuts import render, redirect
-from .models import Restaurant, Item
+from .models import Restaurant, Item, FavoriteRestaurant
 from .forms import RestaurantForm, ItemForm, SignupForm, SigninForm
 from django.contrib.auth import login, authenticate, logout
 from django.db.models import Q
+from django.http import HttpResponse
 
 # This view will be used to favorite a restaurant
 def restaurant_favorite(request, restaurant_id):
-    
-    return
+    if request.user.is_authenticated:
+        print(not FavoriteRestaurant.objects.filter(restaurant=Restaurant.objects.get(
+            id=restaurant_id), user=request.user).exists())
+        if not FavoriteRestaurant.objects.filter(restaurant=Restaurant.objects.get(
+            id=restaurant_id), user=request.user).exists():
+            fav = FavoriteRestaurant(restaurant=Restaurant.objects.get(
+                id=restaurant_id), user=request.user)
+            fav.save()
+        else:
+            FavoriteRestaurant.objects.filter(restaurant=Restaurant.objects.get(
+            id=restaurant_id), user=request.user).delete()
+    return restaurant_list(request)
 
 
 # This view will be used to display only restaurants a user has favorited
 def favorite_restaurants(request):
-    
-    return
+    favorites = FavoriteRestaurant.objects.filter(user=request.user)
+    restaurant = []
 
+    for rest in favorites:
+        restaurant.append(Restaurant.objects.get(id = rest.restaurant.id))
+    context = {
+        'restaurants': restaurant,
+    }
+    return render(request,"list.html",context)
 
 def no_access(request):
     return render(request, 'no_access.html')
+
 
 def signup(request):
     form = SignupForm()
@@ -32,9 +50,10 @@ def signup(request):
             login(request, user)
             return redirect("restaurant-list")
     context = {
-        "form":form,
+        "form": form,
     }
     return render(request, 'signup.html', context)
+
 
 def signin(request):
     form = SigninForm()
@@ -50,13 +69,15 @@ def signin(request):
                 login(request, auth_user)
                 return redirect('restaurant-list')
     context = {
-        "form":form
+        "form": form
     }
     return render(request, 'signin.html', context)
+
 
 def signout(request):
     logout(request)
     return redirect("signin")
+
 
 def restaurant_list(request):
     restaurants = Restaurant.objects.all()
@@ -64,28 +85,35 @@ def restaurant_list(request):
     if query:
         # Not Bonus. Querying through a single field.
         # restaurants = restaurants.filter(name__icontains=query)
-        
+
         # Bonus. Querying through multiple fields.
         restaurants = restaurants.filter(
-            Q(name__icontains=query)|
-            Q(description__icontains=query)|
+            Q(name__icontains=query) |
+            Q(description__icontains=query) |
             Q(owner__username__icontains=query)
         ).distinct()
         #############
     context = {
-       "restaurants": restaurants
+        "restaurants": restaurants,
+        "favourites": favorite_restaurants(request),
     }
     return render(request, 'list.html', context)
 
 
 def restaurant_detail(request, restaurant_id):
+    favourite = False
+    if request.user.is_authenticated:
+        if FavoriteRestaurant.objects.filter(user=request.user,restaurant=Restuarant.objects.get(id=restaurant_id)):
+            favourite = True
     restaurant = Restaurant.objects.get(id=restaurant_id)
     items = Item.objects.filter(restaurant=restaurant)
     context = {
         "restaurant": restaurant,
         "items": items,
+        "favourite":favourite,
     }
     return render(request, 'detail.html', context)
+
 
 def restaurant_create(request):
     if request.user.is_anonymous:
@@ -99,9 +127,10 @@ def restaurant_create(request):
             restaurant.save()
             return redirect('restaurant-list')
     context = {
-        "form":form,
+        "form": form,
     }
     return render(request, 'create.html', context)
+
 
 def item_create(request, restaurant_id):
     form = ItemForm()
@@ -116,10 +145,11 @@ def item_create(request, restaurant_id):
             item.save()
             return redirect('restaurant-detail', restaurant_id)
     context = {
-        "form":form,
+        "form": form,
         "restaurant": restaurant,
     }
     return render(request, 'item_create.html', context)
+
 
 def restaurant_update(request, restaurant_id):
     restaurant_obj = Restaurant.objects.get(id=restaurant_id)
@@ -127,15 +157,17 @@ def restaurant_update(request, restaurant_id):
         return redirect('no-access')
     form = RestaurantForm(instance=restaurant_obj)
     if request.method == "POST":
-        form = RestaurantForm(request.POST, request.FILES, instance=restaurant_obj)
+        form = RestaurantForm(request.POST, request.FILES,
+                              instance=restaurant_obj)
         if form.is_valid():
             form.save()
             return redirect('restaurant-list')
     context = {
         "restaurant_obj": restaurant_obj,
-        "form":form,
+        "form": form,
     }
     return render(request, 'update.html', context)
+
 
 def restaurant_delete(request, restaurant_id):
     restaurant_obj = Restaurant.objects.get(id=restaurant_id)
